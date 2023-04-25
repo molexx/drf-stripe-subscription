@@ -1,5 +1,6 @@
 from drf_stripe.models import Subscription, SubscriptionItem, StripeUser
 from drf_stripe.stripe_models.event import StripeSubscriptionEventData
+from ..stripe_api.customers import get_or_create_stripe_user
 
 
 def _handle_customer_subscription_event_data(data: StripeSubscriptionEventData):
@@ -14,7 +15,7 @@ def _handle_customer_subscription_event_data(data: StripeSubscriptionEventData):
     trial_end = data.object.trial_end
     trial_start = data.object.trial_start
 
-    stripe_user = StripeUser.objects.get(customer_id=customer)
+    stripe_user = get_or_create_stripe_user(customer_id=customer)
 
     subscription, created = Subscription.objects.update_or_create(
         subscription_id=subscription_id,

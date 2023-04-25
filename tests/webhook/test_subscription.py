@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from drf_stripe.models import Subscription, SubscriptionItem
 from drf_stripe.stripe_webhooks.handler import handle_webhook_event
 from ..base import BaseTest
@@ -7,9 +9,10 @@ class TestWebhookSubscriptionEvents(BaseTest):
 
     def setUp(self) -> None:
         self.setup_product_prices()
-        self.setup_user_customer()
 
-    def create_subscription(self):
+    def create_subscription(self, create_user=True):
+        if create_user:
+            self.setup_user_customer()
         # create subscription
         event = self._load_test_data("2020-08-27/webhook_subscription_created.json")
         handle_webhook_event(event)
@@ -22,6 +25,33 @@ class TestWebhookSubscriptionEvents(BaseTest):
         # check subscription instance is created
         subscription = Subscription.objects.get(subscription_id="sub_1KHlYHL14ex1CGCiIBo8Xk5p")
         self.assertEqual(subscription.stripe_user.customer_id, "cus_tester")
+        self.assertEqual(subscription.stripe_user.user.email, "tester1@example.com")
+
+        # check subscription item instance is created
+        sub_item = SubscriptionItem.objects.get(sub_item_id="si_KxgwlJyHxmgJKx")
+        self.assertEqual(sub_item.subscription.subscription_id, subscription.subscription_id)
+        self.assertEqual(sub_item.price.price_id, "price_1KHkCLL14ex1CGCipzcBdnOp")
+        self.assertEqual(sub_item.price.product.product_id, "prod_KxfXRXOd7dnLbz")
+
+    @patch('stripe.Customer.retrieve')
+    def test_event_handler_subscription_created_with_new_customer(self, mocked_customer_retrieve_fn):
+        """Mock customer subscription creation event
+
+        This time self.setup_user_customer() will not be called to test that the subscription webhook
+        will create the StripeUser and Django User
+        """
+
+        mocked_customer_retrieve_fn.return_value = {
+            "email": "tester1@example.com",
+            "id": "cus_tester",
+        }
+
+        self.create_subscription(create_user=False)
+
+        # check subscription instance is created
+        subscription = Subscription.objects.get(subscription_id="sub_1KHlYHL14ex1CGCiIBo8Xk5p")
+        self.assertEqual(subscription.stripe_user.customer_id, "cus_tester")
+        self.assertEqual(subscription.stripe_user.user.email, "tester1@example.com")
 
         # check subscription item instance is created
         sub_item = SubscriptionItem.objects.get(sub_item_id="si_KxgwlJyHxmgJKx")
